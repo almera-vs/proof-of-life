@@ -1,0 +1,78 @@
+# Proof of Life drill configuration.
+# Secrets are only ever referenced through env: or file:, never written here.
+version: 1
+
+drill:
+  name: billing-prod          # letters, digits, dot, dash, underscore
+  rto_target: 30m             # rto.within_target fails above this
+  restore_timeout: 2h         # restore.completes fails above this
+  # max_age: 26h              # backup.freshness fails above this
+
+source:
+  type: pgbackrest            # or: pgdump
+  stanza: billing
+  repo:
+    type: s3                  # or: posix, with path: set to the repository
+    bucket: acme-pg-backups
+    region: eu-central-1
+    path: /pgbackrest
+    credentials: { from_env: true }  # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN
+    # endpoint: minio.internal  # S3-compatible storage only
+    # port: 9000
+    # uri_style: path
+    # verify_tls: false
+    # read_gid: 1500          # posix only: a group that can read the repository
+  cipher_pass: { file: /run/secrets/pgbr_cipher }
+
+  # For pg_dump archives (custom or directory format) use instead:
+  #   type: pgdump
+  #   pattern: "billing-*.dump"   # the newest match wins
+  #   repo: { type: posix, path: /backups/billing }
+
+recovery:
+  target: latest              # or: { time: "2026-11-01T02:00:00Z" } or { lsn: "0/5000060" }
+
+fingerprint:
+  dsn: { env: POL_FINGERPRINT_DSN }   # read-only role; see deploy/sql/roles.sql
+  exact_count_tables: [public.invoices, public.customers]
+  row_count_tolerance: 0.5%
+  # The heartbeat is the only feature that writes to production. It is off by default.
+  heartbeat: { enabled: false, interval: 30s }
+
+assertions:
+  - name: invoices_up_to_backup
+    sql: "SELECT count(*) FROM invoices WHERE created_at < :backup_stop_time"
+    expect: { equals_fingerprint: true }
+
+sandbox:
+  runtime: docker
+  image: postgres:{{major}}
+  cpus: 2
+  memory: 8GiB
+  network: none               # the server never has a network
+  # restore_network: bridge   # used only by the short job that reads object storage
+
+checks:
+  amcheck: { enabled: true, time_budget: 20m }
+
+evidence:
+  path: /var/lib/pol/evidence.jsonl
+  sign_key: /etc/pol/ed25519.key    # create with: pol evidence keygen --out /etc/pol/ed25519.key
+
+report:
+  dir: /var/lib/pol/reports
+
+notify:
+  on: [fail, warn]
+  slack: { webhook: { env: POL_SLACK_WEBHOOK } }
+  # webhook: { url: { env: POL_WEBHOOK_URL } }
+  # smtp:
+  #   host: smtp.internal
+  #   port: 587
+  #   username: pol
+  #   password: { file: /run/secrets/smtp }
+  #   from: pol@example.com
+  #   to: [dba@example.com]
+
+# metrics:
+#   textfile: /var/lib/node_exporter/textfile/pol.prom

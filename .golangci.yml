@@ -1,0 +1,34 @@
+version: "2"
+linters:
+  enable:
+    - errcheck
+    - errorlint
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+    gosec:
+      excludes:
+        - G304
+        - G115
+        - G302
+        - G306
+  exclusions:
+    presets:
+      - std-error-handling
+      - common-false-positives
+    rules:
+      - path: _test\.go
+        linters: [gosec, errcheck, errorlint]
+      - path: test/
+        linters: [gosec, errcheck, errorlint]
+formatters:
+  enable: [gofmt]

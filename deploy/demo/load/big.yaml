@@ -1,0 +1,46 @@
+version: 1
+drill:
+  name: billing-at-scale
+  rto_target: 30m
+  restore_timeout: 2h
+source:
+  type: pgbackrest
+  stanza: billing
+  repo:
+    type: s3
+    bucket: pol-demo
+    region: us-east-1
+    path: /pgbackrest
+    endpoint: minio
+    port: 9000
+    uri_style: path
+    verify_tls: false
+    credentials: { from_env: true }
+  cipher_pass: { env: POL_CIPHER_PASS }
+recovery:
+  target: latest
+fingerprint:
+  dsn: { env: POL_FINGERPRINT_DSN }
+  exact_count_tables: [public.customers, public.orders]
+  row_count_tolerance: 0.5%
+assertions:
+  - name: history_before_backup
+    sql: "SELECT count(*) FROM pgbench_history WHERE mtime < :backup_stop_time"
+    expect: { equals_fingerprint: true }
+  - name: orders_before_backup
+    sql: "SELECT count(*) FROM orders WHERE created_at < :backup_stop_time"
+    expect: { equals_fingerprint: true }
+sandbox:
+  runtime: docker
+  image: postgres:{{major}}
+  cpus: 4
+  memory: 8GiB
+  network: none
+  restore_network: pol-demo
+checks:
+  amcheck: { enabled: true, time_budget: 60m }
+evidence:
+  path: /var/lib/pol/evidence.jsonl
+  sign_key: /var/lib/pol/ed25519.key
+report:
+  dir: /var/lib/pol/reports

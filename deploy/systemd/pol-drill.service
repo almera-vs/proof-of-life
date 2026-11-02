@@ -1,0 +1,23 @@
+[Unit]
+Description=Proof of Life restore drill
+Documentation=file:///usr/share/doc/pol/README.md
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pol
+Group=docker
+EnvironmentFile=/etc/pol/env
+ExecStartPre=/usr/local/bin/pol fingerprint capture -c /etc/pol/drill.yaml
+ExecStart=/usr/local/bin/pol run -c /etc/pol/drill.yaml
+ExecStartPost=/usr/local/bin/pol gc
+TimeoutStartSec=6h
+KillSignal=SIGTERM
+TimeoutStopSec=5min
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/pol

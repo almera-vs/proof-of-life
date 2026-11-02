@@ -1,0 +1,5 @@
+30 1 * * * pol . /etc/pol/env; /usr/local/bin/pol fingerprint capture -c /etc/pol/drill.yaml 2>>/var/log/pol/capture.log
+
+0 2 * * * pol . /etc/pol/env; /usr/local/bin/pol run -c /etc/pol/drill.yaml 2>>/var/log/pol/drill.log
+
+0 6 * * * pol /usr/local/bin/pol gc >/dev/null

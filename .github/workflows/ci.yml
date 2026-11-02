@@ -1,0 +1,158 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Formatting
+        run: test -z "$(gofmt -l .)"
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a
+        with:
+          version: latest
+          args: --build-tags integration
+      - name: Unit tests with the race detector
+        run: go test -race ./...
+      - name: Static binary
+        run: |
+          make build
+          file bin/pol | grep -q 'statically linked'
+          bin/pol version
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Unit tests on Windows
+        run: go test ./...
+      - name: Build the exe
+        run: |
+          go build -trimpath -o pol.exe ./cmd/pol
+          ./pol.exe version
+
+  vulnerabilities:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Known vulnerabilities in code the agent can reach
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          govulncheck ./...
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Fuzz every parser of untrusted input
+        run: |
+          set -e
+          while read -r pkg target; do
+            go test -run '^$' -fuzz "^${target}\$" -fuzztime 30s "./${pkg}"
+          done <<'TARGETS'
+          internal/source/pgdump FuzzReadHeader
+          internal/source/pgdump FuzzSafeName
+          internal/source/pgbackrest FuzzParseListing
+          internal/source/pgbackrest FuzzParseHistory
+          internal/source/pgbackrest FuzzParseVerify
+          internal/evidence FuzzVerify
+          internal/config FuzzParse
+          internal/fingerprint FuzzBindParameters
+          internal/sandbox FuzzRedactValues
+          TARGETS
+
+  happy-path:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["14", "15", "16", "17", "18"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: End to end on PostgreSQL ${{ matrix.postgres }}
+        env:
+          POL_TEST_PG_MAJOR: ${{ matrix.postgres }}
+        run: go test -p 1 -tags integration -timeout 50m -v ./test/integration/
+
+  fault-injection:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["14", "15", "16", "17", "18"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Fault injection on PostgreSQL ${{ matrix.postgres }}
+        env:
+          POL_TEST_PG_MAJOR: ${{ matrix.postgres }}
+        run: go test -p 1 -tags integration -timeout 60m -v ./test/fault/
+
+  quickstart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: The README's quickstart, on a clean machine with no images
+        run: bash test/quickstart.sh
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Distroless image
+        run: |
+          docker build -t pol:ci .
+          docker run --rm pol:ci version
+      - name: Runs as non-root, and needs the socket's group
+        run: |
+          test "$(docker inspect pol:ci --format '{{.Config.User}}')" != ""
+          test "$(docker inspect pol:ci --format '{{.Config.User}}')" != "root"
+          sock=/var/run/docker.sock
+          set +e
+          out=$(docker run --rm -v $sock:$sock pol:ci gc --dry-run 2>&1)
+          code=$?
+          set -e
+          echo "$out"
+          test "$code" -eq 4
+          echo "$out" | grep -q 'group that owns the socket'
+          docker run --rm --group-add "$(stat -c %g $sock)" -v $sock:$sock pol:ci gc --dry-run

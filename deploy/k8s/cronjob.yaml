@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pol-drill
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 7
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 21600
+      template:
+        spec:
+          restartPolicy: Never
+          terminationGracePeriodSeconds: 300
+          securityContext:
+            supplementalGroups: [999]
+            fsGroup: 65532
+          initContainers:
+            - name: fingerprint
+              image: pol:0.1.0
+              args: ["fingerprint", "capture", "-c", "/etc/pol/drill.yaml"]
+              envFrom: [{ secretRef: { name: pol-secrets } }]
+              env: [{ name: DOCKER_HOST, value: unix:///var/run/docker.sock }]
+              volumeMounts: &mounts
+                - { name: config, mountPath: /etc/pol, readOnly: true }
+                - { name: state, mountPath: /var/lib/pol }
+                - { name: docker, mountPath: /var/run/docker.sock }
+          containers:
+            - name: drill
+              image: pol:0.1.0
+              args: ["run", "-c", "/etc/pol/drill.yaml"]
+              envFrom: [{ secretRef: { name: pol-secrets } }]
+              env: [{ name: DOCKER_HOST, value: unix:///var/run/docker.sock }]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              volumeMounts: *mounts
+          volumes:
+            - { name: config, configMap: { name: pol-config } }
+            - { name: state, persistentVolumeClaim: { claimName: pol-state } }
+            - { name: docker, hostPath: { path: /var/run/docker.sock, type: Socket } }

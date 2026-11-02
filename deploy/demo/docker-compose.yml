@@ -1,0 +1,123 @@
+name: pol-demo
+
+x-pgbackrest-env: &pgbackrest-env
+  PGBACKREST_STANZA: billing
+  PGBACKREST_REPO1_TYPE: s3
+  PGBACKREST_REPO1_PATH: /pgbackrest
+  PGBACKREST_REPO1_S3_BUCKET: pol-demo
+  PGBACKREST_REPO1_S3_REGION: us-east-1
+  PGBACKREST_REPO1_S3_ENDPOINT: minio
+  PGBACKREST_REPO1_STORAGE_PORT: "9000"
+  PGBACKREST_REPO1_S3_URI_STYLE: path
+  PGBACKREST_REPO1_S3_KEY: demo-access
+  PGBACKREST_REPO1_S3_KEY_SECRET: demo-secret-key
+  PGBACKREST_REPO1_STORAGE_VERIFY_TLS: "n"
+  PGBACKREST_REPO1_CIPHER_TYPE: aes-256-cbc
+  PGBACKREST_REPO1_CIPHER_PASS: demo-cipher-pass
+  PGBACKREST_REPO1_RETENTION_FULL: "4"
+  PGBACKREST_PG1_PATH: /var/lib/postgresql/data
+
+networks:
+  default:
+    name: pol-demo
+
+volumes:
+  certs:
+  minio-data:
+  pgdata:
+  state:
+
+services:
+  certs:
+    image: postgres:17
+    user: root
+    volumes:
+      - certs:/certs
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        [ -f /certs/public.crt ] ||
+        (openssl req -x509 -newkey rsa:2048 -nodes -days 365
+        -keyout /certs/private.key -out /certs/public.crt -subj /CN=minio
+        -addext subjectAltName=DNS:minio && chmod 0644 /certs/private.key /certs/public.crt)
+
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    user: root
+    depends_on:
+      certs:
+        condition: service_completed_successfully
+    environment:
+      MINIO_ROOT_USER: demo-access
+      MINIO_ROOT_PASSWORD: demo-secret-key
+    command: ["server", "/data", "--certs-dir", "/certs"]
+    volumes:
+      - certs:/certs:ro
+      - minio-data:/data
+
+  bucket:
+    image: cgr.dev/chainguard/minio-client:latest
+    user: root
+    depends_on:
+      - minio
+    environment:
+      MC_HOST_demo: https://demo-access:demo-secret-key@minio:9000
+    entrypoint: ["/usr/bin/mc"]
+    command: ["mb", "--insecure", "--ignore-existing", "demo/pol-demo"]
+    restart: on-failure
+
+  postgres:
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
+      args:
+        PG_MAJOR: "17"
+    depends_on:
+      bucket:
+        condition: service_completed_successfully
+    environment:
+      <<: *pgbackrest-env
+      POSTGRES_PASSWORD: demo-only
+      POSTGRES_DB: billing
+    entrypoint: ["/usr/local/bin/demo-entrypoint.sh"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/demo-ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 150
+
+  pol:
+    profiles: [tools]
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    user: root
+    environment:
+      AWS_ACCESS_KEY_ID: demo-access
+      AWS_SECRET_ACCESS_KEY: demo-secret-key
+      POL_FINGERPRINT_DSN: postgres://pol_fingerprint:demo-only@postgres:5432/billing?sslmode=disable
+      POL_CIPHER_PASS: demo-cipher-pass
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./drill.yaml:/etc/pol/drill.yaml:ro
+      - state:/var/lib/pol
+
+  reports:
+    profiles: [tools]
+    image: postgres:17
+    user: root
+    volumes:
+      - state:/var/lib/pol:ro
+      - ./out:/out
+    entrypoint: ["sh", "-c", "cp /var/lib/pol/reports/* /out/ && ls /out"]
+
+  break:
+    profiles: [tools]
+    image: cgr.dev/chainguard/minio-client:latest
+    user: root
+    environment:
+      MC_HOST_demo: https://demo-access:demo-secret-key@minio:9000
+    entrypoint: ["/usr/bin/mc"]
+    command: ["rm", "--insecure", "--recursive", "--force", "demo/pol-demo/pgbackrest/archive/billing/17-1/0000000100000000"]

@@ -1,0 +1,43 @@
+version: 1
+drill:
+  name: billing-demo
+  rto_target: 5m
+  restore_timeout: 10m
+source:
+  type: pgbackrest
+  stanza: billing
+  repo:
+    type: s3
+    bucket: pol-demo
+    region: us-east-1
+    path: /pgbackrest
+    endpoint: minio
+    port: 9000
+    uri_style: path
+    verify_tls: false
+    credentials: { from_env: true }
+  cipher_pass: { env: POL_CIPHER_PASS }
+recovery:
+  target: latest
+fingerprint:
+  dsn: { env: POL_FINGERPRINT_DSN }
+  exact_count_tables: [public.customers]
+  row_count_tolerance: 0.5%
+assertions:
+  - name: invoices_before_backup
+    sql: "SELECT count(*) FROM invoices WHERE created_at < :backup_stop_time"
+    expect: { equals_fingerprint: true }
+sandbox:
+  runtime: docker
+  image: postgres:{{major}}
+  cpus: 2
+  memory: 2GiB
+  network: none
+  restore_network: pol-demo
+checks:
+  amcheck: { enabled: true, time_budget: 5m }
+evidence:
+  path: /var/lib/pol/evidence.jsonl
+  sign_key: /var/lib/pol/ed25519.key
+report:
+  dir: /var/lib/pol/reports

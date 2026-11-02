@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run report — {{.Drill}}</title>
+<style>
+:root{--ground:#F4F3EE;--ink:#17191B;--accent:#E3CF3F;--pass:#2B6A4E;--fail:#B42318;--line:#DEDCD4;--soft:#ECEAE3;--muted:#585C60;--body:#3A3D40;--sans:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;--mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans)}
+a{color:var(--ink)}
+header{background:#fff;border-bottom:1px solid var(--line)}
+.bar{max-width:1160px;margin:0 auto;padding:16px 32px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px}
+.brand{display:flex;align-items:center;gap:12px}
+.mark{width:14px;height:14px;background:var(--accent);outline:1px solid var(--ink)}
+.name{font-weight:600;font-size:16px;letter-spacing:.01em}
+.kind{color:var(--muted);font-size:14px}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn{min-height:44px;padding:0 18px;font:500 14px var(--sans);background:#fff;color:var(--ink);border:1px solid #C9C7BE;cursor:pointer;display:inline-flex;align-items:center;text-decoration:none}
+.btn.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+main{max-width:1160px;margin:0 auto;padding:48px 32px 64px;display:flex;flex-direction:column;gap:40px}
+section{display:flex;flex-direction:column;gap:16px}
+.meta{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;font:13px var(--mono);color:var(--muted)}
+.hero{display:flex;flex-wrap:wrap;align-items:center;gap:20px}
+h1{margin:0;font-size:56px;line-height:1.05;font-weight:500;letter-spacing:-.02em}
+h2{margin:0;font-size:20px;font-weight:600}
+.card h2{font-size:18px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;font:500 13px var(--mono);letter-spacing:.06em;background:var(--accent);color:var(--ink)}
+.pill.fail{background:var(--fail);color:#fff}
+.lead{margin:0;max-width:720px;font-size:18px;line-height:1.55;color:var(--body)}
+.figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+.figure{background:#fff;padding:22px 24px;display:flex;flex-direction:column;gap:10px}
+.figure .label,.figure .note{font-size:13px;color:var(--muted)}
+.figure .value{font-size:32px;font-weight:500;letter-spacing:-.01em}
+.meter{height:6px;background:var(--soft)}
+.meter div{height:6px;background:var(--ink)}
+.meter div.over{background:var(--fail)}
+.attention{background:#fff;border:1px solid var(--fail);padding:20px 24px;gap:14px}
+.attention.warn{border-color:var(--accent)}
+.attention ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:14px}
+.attention li{display:flex;flex-direction:column;gap:4px;font-size:15px;line-height:1.5;color:var(--body)}
+.attention code{font:13px var(--mono);color:var(--ink)}
+.split{display:flex;height:40px;gap:2px}
+.legend{display:flex;flex-wrap:wrap;gap:12px 28px}
+.legend div{display:flex;align-items:center;gap:8px;font-size:14px}
+.swatch{display:inline-block;width:12px;height:12px;outline:1px solid #C9C7BE}
+.mono{font-family:var(--mono);color:var(--muted)}
+.heading{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px}
+.tally{font-size:14px;color:var(--muted)}
+.table{overflow-x:auto;background:#fff;border:1px solid var(--line)}
+table{width:100%;min-width:820px;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:var(--muted);font-size:13px;font-weight:500;padding:14px 20px;border-bottom:1px solid var(--line)}
+td{padding:14px 20px;border-bottom:1px solid var(--soft);vertical-align:top}
+td.id{font:13px var(--mono);white-space:nowrap}
+td.obs{font:13px var(--mono);color:var(--body)}
+td.by{font:12px var(--mono);color:var(--body)}
+td.nowrap{white-space:nowrap}
+td.ctl{font-weight:500;white-space:nowrap}
+tr.why td{padding-top:0;color:var(--body);font-size:14px;line-height:1.5;border-bottom:1px solid var(--soft)}
+tr.has-why td{border-bottom:0}
+.r{display:inline-flex;align-items:center;gap:6px;font-weight:500}
+.r.pass{color:var(--pass)}
+.r.fail{color:var(--fail)}
+.r.warn{color:var(--ink)}
+.r.warn::before{content:'';width:10px;height:10px;background:var(--accent)}
+.r.skipped{color:var(--muted);font-weight:400}
+.tag{padding:3px 8px;background:var(--soft);font-size:13px}
+.tag.no{background:var(--fail);color:#fff}
+.tag.part{background:var(--accent)}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+.card{background:#fff;border:1px solid var(--line);padding:24px;display:flex;flex-direction:column;gap:14px}
+dl{margin:0;display:grid;grid-template-columns:max-content 1fr;gap:10px 20px;font-size:13px}
+dt{color:var(--muted)}
+dd{margin:0;font-family:var(--mono);overflow-wrap:anywhere}
+code.cmd{display:block;padding:12px 14px;background:var(--ground);font:12px/1.5 var(--mono);overflow-wrap:anywhere}
+footer{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;padding-top:24px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+@media (max-width:640px){.bar{padding:16px}main{padding:32px 16px 48px}h1{font-size:40px}}
+@page{size:A4;margin:14mm}
+@media print{
+*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{background:#fff;font-size:12px}
+.actions{display:none}
+.bar{padding:0 0 10px}
+header{border-bottom:1px solid var(--line)}
+main{max-width:none;padding:18px 0 0;gap:22px}
+h1{font-size:38px}
+.lead{font-size:14px;max-width:none}
+.figures{grid-template-columns:repeat(4,1fr)}
+.figure{padding:12px}
+.figure .value{font-size:20px}
+.page-break{break-before:page}
+table{min-width:0;font-size:11px}
+th,td{padding:7px 9px}
+td.id,td.obs,td.by{font-size:10px;white-space:normal}
+tr,.card,.attention li{break-inside:avoid}
+h2,.heading,.keep,tr.has-why{break-after:avoid}
+.attention li,tr.why td{font-size:11px}
+.table{overflow:visible}
+.pair{grid-template-columns:1fr 1fr;gap:12px}
+.card{padding:12px}
+
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand"><div class="mark"></div><span class="name">Proof of Life</span><span class="kind">Restore report</span></div>
+    <div class="actions">
+      <a class="btn" href="#evidence">Verify evidence</a>
+      <button type="button" class="btn primary" onclick="window.print()">Download PDF</button>
+    </div>
+  </div>
+</header>
+<main>
+  <section style="gap:14px">
+    <div class="meta"><span>{{.Drill}}</span><span aria-hidden="true">·</span><span>run {{.RunID}}</span><span aria-hidden="true">·</span><span>{{utc .StartedAt}} – {{clock .FinishedAt}} UTC</span></div>
+    <div class="hero">
+      <h1>{{.Title}}</h1>
+      <span class="pill{{if eq .Status "fail"}} fail{{end}}">{{if eq .Status "pass"}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>{{end}}{{.Badge}}</span>
+    </div>
+    <p class="lead">{{.Summary}}</p>
+  </section>
+
+  <section class="figures" aria-label="Key figures">
+    <div class="figure">
+      <span class="label">Measured RTO</span>
+      <span class="value">{{.RTO.Text}}</span>
+      {{if .RTO.Reached}}<div class="meter"><div class="{{if gt .RTO.Percent 100}}over{{end}}" style="{{barWidth .RTO.Percent}}"></div></div>
+      <span class="note">{{.RTO.Percent}}% of {{.RTO.TargetText}} target</span>{{else}}<span class="note">Target {{.RTO.TargetText}}</span>{{end}}
+    </div>
+    <div class="figure">
+      <span class="label">Recovery point reached</span>
+      <span class="value">{{.RecoveryPoint.Text}}</span>
+      <span class="note">{{.RecoveryPoint.Detail}}</span>
+    </div>
+    <div class="figure">
+      <span class="label">Backup age at drill</span>
+      <span class="value">{{.Backup.AgeText}}</span>
+      <span class="note">{{.Backup.Detail}}</span>
+    </div>
+    <div class="figure">
+      <span class="label">Evidence</span>
+      {{if .Evidence.Written}}<span class="value">#{{.Evidence.Seq}}</span><span class="note">{{.Evidence.Note}}</span>
+      {{else}}<span class="value">None</span><span class="note">Record not written</span>{{end}}
+    </div>
+  </section>
+
+  {{if .Attention}}
+  <section class="attention{{if ne .Status "fail"}} warn{{end}}">
+    <h2>What needs attention</h2>
+    <ul>
+      {{range .Attention}}<li><code>{{.ID}}</code><span>{{.Reason}}</span></li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+
+  {{if .Phases}}
+  <section>
+    <h2>Where the time went</h2>
+    <div class="split" role="img" aria-label="Phase durations:{{range .Phases}} {{.Label}} {{.Text}};{{end}}">
+      {{range .Phases}}<div style="{{phaseBar .}}"></div>{{end}}
+    </div>
+    <div class="legend">
+      {{range .Phases}}<div><span class="swatch" style="{{swatch .}}" aria-hidden="true"></span><span>{{.Label}}</span><span class="mono">{{.Text}}</span></div>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
+  <section class="page-break">
+    <div class="heading">
+      <h2>Checks</h2>
+      <span class="tally">{{.Counts.Passed}} passed · {{.Counts.Warnings}} warnings · {{.Counts.Failed}} failed{{if .Counts.Skipped}} · {{.Counts.Skipped}} not run{{end}}</span>
+    </div>
+    <div class="table">
+      <table>
+        <thead><tr><th>Check</th><th>What it proves</th><th>Result</th><th>Observed</th></tr></thead>
+        <tbody>
+          {{range .Checks}}
+          <tr{{if .Reason}} class="has-why"{{end}}>
+            <td class="id">{{.ID}}</td>
+            <td>{{.Proves}}</td>
+            <td class="nowrap">{{if eq .Status "pass"}}<span class="r pass"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Pass</span>{{else if eq .Status "fail"}}<span class="r fail"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>Fail</span>{{else if eq .Status "warn"}}<span class="r warn">Warning</span>{{else}}<span class="r skipped">Not run</span>{{end}}</td>
+            <td class="obs">{{.Observed}}</td>
+          </tr>
+          {{if .Reason}}<tr class="why"><td></td><td colspan="3">{{.Reason}}</td></tr>{{end}}
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="keep" style="display:flex;flex-direction:column;gap:6px">
+      <h2>Controls evidenced</h2>
+      <span class="tally">Mapping to be confirmed by your compliance reviewer.</span>
+    </div>
+    <div class="table">
+      <table>
+        <thead><tr><th>Control</th><th>Expectation</th><th>Supported by</th><th>Status</th></tr></thead>
+        <tbody>
+          {{range .Controls}}
+          <tr>
+            <td class="ctl">{{.Name}}</td>
+            <td>{{.Expectation}}</td>
+            <td class="by">{{.ByText}}</td>
+            <td class="nowrap"><span class="tag{{if eq .Status "Not evidenced"}} no{{else if eq .Status "Partly evidenced"}} part{{end}}">{{.Status}}</span></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="pair">
+    <div class="card" id="evidence">
+      <h2>Evidence record</h2>
+      {{if .Evidence.Written}}
+      <dl>
+        <dt>Sequence</dt><dd>{{.Evidence.Seq}}</dd>
+        <dt>Record hash</dt><dd>{{shortHash .Evidence.Hash}}</dd>
+        <dt>Previous</dt><dd>{{shortHash .Evidence.PrevHash}}</dd>
+        <dt>Signature</dt><dd>ed25519 · key {{.Evidence.KeyID}}</dd>
+      </dl>
+      <code class="cmd">pol evidence verify --log {{.Evidence.Log}} --pub &lt;public key&gt;</code>
+      {{else}}
+      <p style="margin:0;font-size:14px;color:var(--body)">No signed record exists for this run{{if .Evidence.Error}}: {{.Evidence.Error}}{{end}}.</p>
+      {{end}}
+    </div>
+    <div class="card">
+      <h2>Environment</h2>
+      <dl>
+        {{range .Environment}}<dt>{{.Label}}</dt><dd>{{.Value}}</dd>
+        {{end}}
+      </dl>
+    </div>
+  </section>
+
+  <footer>
+    <span>No customer data left this environment. Only counts, hashes and timings are recorded.</span>
+  </footer>
+</main>
+</body>
+</html>
